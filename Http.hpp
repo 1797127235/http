@@ -6,8 +6,9 @@
 #include<sstream>
 #include<fstream>
 #include"Log.hpp"
+//#define TEST
 using namespace log_ns;
-const static std::string base_sep="\r\r";
+const static std::string base_sep="\r\n";
 const static std::string base_key=": ";
 const static std::string prefixpath="wwwroot";
 const static std::string home_path="index.html";
@@ -121,19 +122,45 @@ private:
 class HttpResponse
 {
 public:
-
+    HttpResponse():_blank_line(base_sep),_http_version(http_version)
+    {}
+    ~HttpResponse(){}
+    std::string Serialize()
+    {
+        std::stringstream ss;
+        ss<<_http_version<<" "<<_status_code<<" "<<_status_desc<<base_sep;
+        for(auto &header:_headers_kv)
+        {
+            ss<<header.first<<":"<<header.second<<base_sep;
+        }
+        ss<<base_sep<<_resp_body_text;
+        return ss.str();
+    }
+    void AddCode(std::string code,std::string &desc)
+    {
+        _status_code=code;
+        _status_desc=desc;
+    }
+    void AddHeader(std::string &key,std::string &value)
+    {
+        _headers_kv[key]=value;
+    }
+    void AddBody(std::string &body)
+    {
+        _resp_body_text=body;
+    }
 private:
     std::string _status_line;//状态行
+    std::string _status_code;
+    std::string _status_desc;
     std::unordered_map<std::string,std::string> _headers_kv;
     std::string _blank_line;
 
     std::string _http_version;
-    std::string _status_code;
     std::string _status_msg;
     std::string _content_type;
     std::string _resp_body_text;
 };
-
 
 
 class HttpServer{
@@ -163,14 +190,18 @@ public:
         responsestr += "Content-Type: text/html\r\n";
         responsestr += "\r\n";
         responsestr += "<html><h1>hello Linux, hello bite!</h1></html>";
+        std::cout<<"responsestr: "<<responsestr.size()<<std::endl; 
         return responsestr;
 #else
         HttpRequest req;
         req.Deserialization(reqstr);
-        //td::string path=req.Getpath();
+        HttpResponse resp;
         std::string content=GetFileContent(req.Getpath());
-        std::cout<<"content length: "<<content.size()<<std::endl;
-        return "";
+        resp.AddCode(std::string("200"),std::string("OK"));
+        //resp.AddHeader(std::string("Content-Type"), std::string("text/html"));
+        resp.AddHeader(std::string("Content-Length"),std::to_string(content.size()));
+        resp.AddBody(content);
+        return resp.Serialize();
 #endif
     }
     
