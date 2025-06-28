@@ -58,9 +58,9 @@ else()
     target_link_libraries(http_server rt)
 endif()
 
-# 设置输出目录
+# 设置输出目录到项目根目录
 set_target_properties(http_server PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 
 # 打印配置信息
