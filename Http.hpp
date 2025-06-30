@@ -2,7 +2,9 @@
 #include<iostream>
 #include<string>
 #include<vector>
+#include <string.h>
 #include<unordered_map>
+#include<cstring>
 #include<sstream>
 #include<fstream>
 #include"Log.hpp"
@@ -13,6 +15,9 @@ const static std::string base_key=": ";
 const static std::string prefixpath="wwwroot";
 const static std::string home_path="index.html";
 const static std::string http_version="HTTP/1.0";
+const static std::string suffixsep=".";
+const static std::string arg_sep="?";
+
 class HttpRequest
 {
 public:
@@ -39,13 +44,40 @@ public:
         std::stringstream ss(_req_line);
         ss>>_method>>_url>>_version;
 
+
+        if(_stricmp(_method.c_str(),"GET")==0)
+        {
+            auto pos=_url.find(arg_sep);
+            if(pos!=std::string::npos)
+            {
+                _body_text+=_url.substr(pos+arg_sep.size());
+                _url.resize(pos);
+            }
+        }
+
         _path+=_url;
         if(_path.back()!='/')
         {
             _path+='/';
         }
          _path+=home_path;
+        std::cout<<"path: "<<_path<<std::endl;
+        //获取资源后缀
+         auto pos=_path.rfind(suffixsep);
+         if(pos!=std::string::npos)
+         {
+            _suffix=_path.substr(pos);
+         }
+         else
+         {
+            _suffix=".default";
+         }
 
+    }
+
+    std::string GetSuffix()
+    {
+        return _suffix;
     }
     void ParseReqHeaders()//解析请求头
     {
@@ -80,8 +112,9 @@ public:
 
         if(!reqstr.empty())
         {
-            _body_text=reqstr;
+            _body_text+=reqstr;
         }
+        //进一步反序列化
         ParseReqLine();
         ParseReqHeaders();
     }
@@ -115,6 +148,7 @@ private:
     std::string _url;
     std::string _version;
     std::string _path;
+    std::string _suffix;//资源后缀
     std::unordered_map<std::string,std::string> _headers_kv;
 };
 
@@ -167,19 +201,51 @@ class HttpServer{
 public:
     HttpServer()
     {
+        _mime_type[".html"]="text/html";
+        _mime_type[".jpg"]="image/jpeg";
+        _mime_type[".png"]="image/png";
+        _mime_type[".css"]="text/css";
+        _mime_type[".js"]="application/javascript";
+        _mime_type[".ico"]="image/x-icon";
+        _mime_type[".txt"]="text/plain";
+        _mime_type[".mp4"]="video/mp4";
+        _mime_type[".default"]="text/html";
 
+
+        _status_code_msg["200"]="OK";
+        _status_code_msg["404"]="Not Found";
+        _status_code_msg["500"]="Internal Server Error";
+        _status_code_msg["400"]="Bad Request";
+        _status_code_msg["403"]="Forbidden";
+        _status_code_msg["405"]="Method Not Allowed";
+        _status_code_msg["408"]="Request Timeout";
+        _status_code_msg["414"]="Request-URI Too Long";
+        _status_code_msg["501"]="Not Implemented";
+        _status_code_msg["502"]="Bad Gateway";
+         
     }
-    std::string GetFileContent(std::string &path)
+    std::string GetFileContent(const std::string &path)
     {
-        std::ifstream ifs(path.c_str());
-        if(!ifs.is_open())
-        {
-            return "";
-        }
-        std::ostringstream oss;
-        oss << ifs.rdbuf();
-        return oss.str();
-        
+        // std::ifstream ifs(path.c_str());
+        // if(!ifs.is_open())
+        // {
+        //     return "";
+        // }
+        // std::ostringstream oss;
+        // oss << ifs.rdbuf();
+        // return oss.str();
+
+        std::ifstream in(path,std::ios::binary);
+        if(!in.is_open()) return std::string();
+        in.seekg(0,in.end);
+        int filesize = in.tellg();
+        in.seekg(0,in.beg);
+
+        std::string content;
+        content.resize(filesize);
+        in.read((char*)content.data(),filesize);
+        in.close();
+        return content;
     }
     std::string HandlerHttpRequest(std::string &reqstr)
     {
@@ -197,8 +263,17 @@ public:
         req.Deserialization(reqstr);
         HttpResponse resp;
         std::string content=GetFileContent(req.Getpath());
-        resp.AddCode(std::string("200"),std::string("OK"));
-        //resp.AddHeader(std::string("Content-Type"), std::string("text/html"));
+        if(content.empty())
+        {
+            resp.AddCode(std::string("404"),_status_code_msg["404"]);
+        }
+        else
+        {
+            resp.AddCode(std::string("200"),_status_code_msg["200"]);
+        }
+        //添加Content-Type
+        resp.AddHeader(std::string("Content-Type"),_mime_type[req.GetSuffix()]);
+        //添加报文长度
         resp.AddHeader(std::string("Content-Length"),std::to_string(content.size()));
         resp.AddBody(content);
         return resp.Serialize();
@@ -207,5 +282,9 @@ public:
     
 
     ~HttpServer(){}
+private:
+    std::unordered_map<std::string,std::string> _mime_type;
+
+    std::unordered_map<std::string,std::string> _status_code_msg;
 
 };
